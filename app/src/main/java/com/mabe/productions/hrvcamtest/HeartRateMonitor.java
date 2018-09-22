@@ -6,8 +6,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.hardware.Camera;
 import android.hardware.Camera.PreviewCallback;
+import android.hardware.Sensor;
+import android.hardware.SensorAdditionalInfo;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventCallback;
+import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
@@ -18,7 +25,16 @@ import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.TextView;
+
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.utils.Utils;
 
 import javax.security.auth.login.LoginException;
 
@@ -31,6 +47,8 @@ import javax.security.auth.login.LoginException;
  */
 public class HeartRateMonitor extends Activity {
 
+    private TextView hrv_txt;
+    private TextView txt_info;
     private static final String TAG = "HeartRateMonitor";
 
     private static SurfaceView preview = null;
@@ -38,7 +56,7 @@ public class HeartRateMonitor extends Activity {
     private static Camera camera = null;
     private static View image = null;
     private static TextView text = null;
-
+    private static LineChart chart_hr;
     private static long startTime = 0;
 
     private static WakeLock wakeLock = null;
@@ -57,6 +75,9 @@ public class HeartRateMonitor extends Activity {
         return currentType;
     }
 
+    private static RMSSD rmssd = new RMSSD();
+    private static int[] intervals=new int[1];
+
     private static int beatsIndex = 0;
     private static final int beatsArraySize = 3;
     private static final int[] beatsArray = new int[beatsArraySize];
@@ -68,10 +89,31 @@ public class HeartRateMonitor extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.main);
+        setContentView(R.layout.main_redone);
 
+
+
+        changeNotifBarColor(Color.parseColor("#2c3e50"), getWindow());
         startTime = System.currentTimeMillis();
-
+        chart_hr = findViewById(R.id.chart_hr);
+        txt_info = findViewById(R.id.info_txt);
+        //Customizing HR chart
+        chart_hr.setData(new LineData());
+        chart_hr.getLineData().setDrawValues(false);
+        chart_hr.getLegend().setEnabled(false);
+        chart_hr.getXAxis().setDrawAxisLine(false);
+        chart_hr.getAxisRight().setDrawAxisLine(false);
+        chart_hr.getAxisLeft().setDrawAxisLine(false);
+        chart_hr.getAxisLeft().setDrawGridLines(false);
+        chart_hr.getXAxis().setDrawGridLines(false);
+        chart_hr.getAxisRight().setDrawGridLines(false);
+        chart_hr.setDescription(null);
+        chart_hr.getAxisLeft().setDrawLabels(false);
+        chart_hr.getAxisRight().setDrawLabels(false);
+        chart_hr.getXAxis().setDrawLabels(false);
+        chart_hr.setTouchEnabled(false);
+        chart_hr.setViewPortOffsets(0f, 0f, 0f, 0f);
+        //chart_hr.setAutoScaleMinMaxEnabled(true);
         preview = (SurfaceView) findViewById(R.id.preview);
         previewHolder = preview.getHolder();
         previewHolder.addCallback(surfaceCallback);
@@ -79,9 +121,20 @@ public class HeartRateMonitor extends Activity {
 
         image = findViewById(R.id.image);
         text = (TextView) findViewById(R.id.text);
-
+        hrv_txt = (TextView) findViewById(R.id.hrv_txt);
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, "DoNotDimScreen");
+
+    }
+
+    public static void changeNotifBarColor(int color, Window window){
+
+        if (Build.VERSION.SDK_INT >= 21) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            window.setStatusBarColor(color);
+        }
+
     }
 
     /**
@@ -144,13 +197,21 @@ public class HeartRateMonitor extends Activity {
 
             int imgAvg = ImageProcessing.decodeYUV420SPtoRedAvg(data.clone(), height, width);
 
+
             Log.i("values", imgAvg + " " + Long.valueOf(System.currentTimeMillis()-startTime));
 
             if(imgAvg < 200){
-                text.setText("No finger detected!");
+                txt_info.setText("No finger detected!");
+                chart_hr.getLineData().clearValues();
+                rmssd.clear();
                 samples.clear();
                 return;
+            }else{
+                txt_info.setText("Measuring...\nTry to stay still and quiet!");
             }
+
+
+            addEntry(imgAvg,getApplicationContext());
 
             // Log.i(TAG, "imgAvg="+imgAvg);
             if (imgAvg == 0 || imgAvg == 255) {
@@ -228,6 +289,40 @@ public class HeartRateMonitor extends Activity {
         }
     };
 
+    private static void addEntry(int hr,Context context) {
+        LineData data = chart_hr.getData();
+        LineDataSet set = (LineDataSet) data.getDataSetByIndex(0);
+        if (set == null) {
+            //Creating a line with single hr value
+            ArrayList<Entry> singleValueList = new ArrayList<>();
+            singleValueList.add(new Entry(0, hr));
+            set = new LineDataSet(singleValueList, "HR");
+            set.setLineWidth(1);
+            set.setDrawValues(false);
+            set.setDrawCircleHole(false);
+            set.setDrawCircles(false);
+            set.setColor(Color.parseColor("#F62459"));
+            set.setDrawFilled(false);
+
+            data.addDataSet(set);
+        } else {
+            set.addEntry(new Entry(set.getEntryCount(), hr));
+        }
+
+        data.notifyDataChanged();
+        chart_hr.notifyDataSetChanged();
+
+
+        chart_hr.setVisibleXRangeMaximum(150);
+        chart_hr.setVisibleXRangeMinimum(150);
+        chart_hr.setVisibleYRangeMinimum(25, YAxis.AxisDependency.RIGHT);
+        chart_hr.setVisibleYRangeMaximum(25, YAxis.AxisDependency.RIGHT);
+
+        chart_hr.moveViewTo(set.getEntryCount(), chart_hr.getY(), YAxis.AxisDependency.RIGHT);
+
+    }
+
+
     private static ArrayList<Long> samples = new ArrayList();
     private static final int SAMPLE_SIZE = 20;
 
@@ -245,23 +340,37 @@ public class HeartRateMonitor extends Activity {
             txt += ("\n" + samples.get(i));
         }
 
-        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        // Vibrate for 500 milliseconds
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            v.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
-        }else{
-            //deprecated in API 26
-            v.vibrate(50);
-        }
+        Log.i("TESTAS", txt);
 
-        Log.i("TEST", "\n" + txt);
+
+
+        //Log.i("TEST", "\n" + txt);
 
         long firstSampleTime = samples.get(0);
         long lastSampleTime = samples.get(samples.size()-1);
         long timePassed = lastSampleTime - firstSampleTime;
 
         double bpm = (double) samples.size() / ((double) timePassed/60000d );
+        int period = (int) (samples.get(samples.size()-1)-samples.get(samples.size()-2));
+        intervals[0] = (int) (60000d/(double)bpm);
+
+        if(period < 300){ // 50-220
+            return;
+        }
+
+        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        // Vibrate for 500 milliseconds
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            v.vibrate(VibrationEffect.createOneShot(5, 1));
+        }else{
+            //deprecated in API 26
+            v.vibrate(50);
+        }
+
+        rmssd.addIntervals(intervals);
         text.setText(String.valueOf((int) bpm));
+        rmssd.calculateRMSSD();
+        hrv_txt.setText("" + rmssd.getPURE_HRV());
 
     }
 

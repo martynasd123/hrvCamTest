@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">hrvCamTest</string>
     <string name="default_text">default text</string>
+    <string name="info_txt">Measuring... \\n Try to stay still and quiet</string>
 </resources>

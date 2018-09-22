@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -20,8 +21,8 @@ public class HeartbeatView extends View {
     private static final Matrix matrix = new Matrix();
     private static final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private static Bitmap greenBitmap = null;
-    private static Bitmap redBitmap = null;
+    private static Drawable greenDrawable = null;
+    private static Drawable redDrawable = null;
 
     private static int parentWidth = 0;
     private static int parentHeight = 0;
@@ -29,16 +30,15 @@ public class HeartbeatView extends View {
     public HeartbeatView(Context context, AttributeSet attr) {
         super(context, attr);
 
-        greenBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.green_icon);
-        redBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.red_icon);
+        greenDrawable = getResources().getDrawable(R.drawable.ic_heart_white);
+        redDrawable = getResources().getDrawable(R.drawable.ic_heart);
     }
 
     public HeartbeatView(Context context) {
         super(context);
 
-        greenBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.green_icon);
-        redBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.red_icon);
-    }
+        greenDrawable = getResources().getDrawable(R.drawable.ic_heart_white);
+        redDrawable = getResources().getDrawable(R.drawable.ic_heart);    }
 
     /**
      * {@inheritDoc}
@@ -59,21 +59,13 @@ public class HeartbeatView extends View {
     protected void onDraw(Canvas canvas) {
         if (canvas == null) throw new NullPointerException();
 
-        Bitmap bitmap = null;
-        if (HeartRateMonitor.getCurrent() == HeartRateMonitor.TYPE.GREEN) bitmap = greenBitmap;
-        else bitmap = redBitmap;
-
-        int bitmapX = bitmap.getWidth() / 2;
-        int bitmapY = bitmap.getHeight() / 2;
-
-        int parentX = parentWidth / 2;
-        int parentY = parentHeight / 2;
-
-        int centerX = parentX - bitmapX;
-        int centerY = parentY - bitmapY;
-
-        matrix.reset();
-        matrix.postTranslate(centerX, centerY);
-        canvas.drawBitmap(bitmap, matrix, paint);
+        Drawable d = null;
+        if (HeartRateMonitor.getCurrent() == HeartRateMonitor.TYPE.GREEN){
+            d = greenDrawable;
+        }else{
+            d = redDrawable;
+        }
+        d.setBounds(canvas.getClipBounds());
+        d.draw(canvas);
     }
 }
