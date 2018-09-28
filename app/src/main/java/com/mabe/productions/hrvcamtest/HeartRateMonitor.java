@@ -3,8 +3,11 @@ package com.mabe.productions.hrvcamtest;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -21,6 +24,9 @@ import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -47,6 +53,7 @@ import javax.security.auth.login.LoginException;
  */
 public class HeartRateMonitor extends Activity {
 
+    private static final int CAMERA_PERMISSION_REQUEST = 2;
     private TextView hrv_txt;
     private TextView txt_info;
     private static final String TAG = "HeartRateMonitor";
@@ -115,15 +122,28 @@ public class HeartRateMonitor extends Activity {
         chart_hr.setViewPortOffsets(0f, 0f, 0f, 0f);
         //chart_hr.setAutoScaleMinMaxEnabled(true);
         preview = (SurfaceView) findViewById(R.id.preview);
-        previewHolder = preview.getHolder();
-        previewHolder.addCallback(surfaceCallback);
-        previewHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+
+        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED){
+            setUpSurfaceHolder();
+        }else{
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA},
+                    CAMERA_PERMISSION_REQUEST);
+        }
 
         image = findViewById(R.id.image);
         text = (TextView) findViewById(R.id.text);
         hrv_txt = (TextView) findViewById(R.id.hrv_txt);
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, "DoNotDimScreen");
+
+    }
+
+    private void setUpSurfaceHolder(){
+        previewHolder = preview.getHolder();
+        previewHolder.addCallback(surfaceCallback);
+        previewHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+
 
     }
 
@@ -152,11 +172,15 @@ public class HeartRateMonitor extends Activity {
     public void onResume() {
         super.onResume();
 
-        wakeLock.acquire();
+        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED){
+            wakeLock.acquire();
 
-        camera = Camera.open();
+            camera = Camera.open();
 
-        startTime = System.currentTimeMillis();
+            startTime = System.currentTimeMillis();
+        }
+
+
     }
 
     /**
@@ -165,16 +189,36 @@ public class HeartRateMonitor extends Activity {
     @Override
     public void onPause() {
         super.onPause();
+        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            wakeLock.release();
 
-        wakeLock.release();
+            camera.setPreviewCallback(null);
+            camera.stopPreview();
+            camera.release();
+            camera = null;
 
-        camera.setPreviewCallback(null);
-        camera.stopPreview();
-        camera.release();
-        camera = null;
+        }
     }
 
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if(requestCode == CAMERA_PERMISSION_REQUEST){
+            if(grantResults[0] == PackageManager.PERMISSION_GRANTED){
+                startActivity(new Intent(HeartRateMonitor.this, HeartRateMonitor.class));
+
+            }else{
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA},
+                        CAMERA_PERMISSION_REQUEST);
+
+
+            }
+        }
+
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+    }
 
     private PreviewCallback previewCallback = new PreviewCallback() {
 
@@ -382,6 +426,8 @@ public class HeartRateMonitor extends Activity {
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
             try {
+
+
                 camera.setPreviewDisplay(previewHolder);
                 camera.setPreviewCallback(previewCallback);
             } catch (Throwable t) {
